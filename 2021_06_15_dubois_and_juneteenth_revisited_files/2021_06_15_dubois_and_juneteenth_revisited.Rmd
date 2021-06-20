@@ -1,0 +1,179 @@
+---
+title: "Du Bois and Juneteenth Revisited"
+date: '2021-06-20'
+editor_options:
+  chunk_output_type: console
+output:
+  html_document: default
+  pdf_document: default
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(tidytuesdayR)
+library(scales)
+library(lubridate)
+library(ggthemes)
+library(tidytext)
+```
+
+
+```{r Load Data, message=FALSE, warning=FALSE}
+tt <- tt_load("2021-06-15")
+```
+
+
+```{r message=FALSE, warning=FALSE}
+tweets <- tt$tweets
+```
+
+
+## Tweet timeline
+
+```{r message=FALSE, warning=FALSE}
+tweets %>%
+  mutate(date = date(datetime)) %>%
+  group_by(date) %>%
+  mutate(total = n()) %>%
+  slice(1) %>%
+  ungroup() %>% 
+  select(datetime, date, total) %>%
+  ggplot(aes(date, total)) +
+  geom_col(fill = "seagreen") +
+  expand_limits(x = c(ymd("2021-02-01"))) +
+  scale_x_date(
+    breaks = c(ymd("2021-02-01"), ymd("2021-03-01"),
+               ymd("2021-04-01"), ymd("2021-05-01")),
+    labels = c("Feb", "Mar", "Apr", "May")
+  ) +
+  labs(x= "",
+       y = "Number of Tweets",
+       titles = "Number of tweets with #DuBoisChallenge in twitter (from 2021 Feb - 2021 May)") +
+  theme_tufte()
+```
+
+
+## Wordcloud for #DuBoisChallenge
+
+Just for fun :)
+
+```{r}
+common_words <- tweets %>%
+  select(content) %>%
+  filter(!is.na(content)) %>%
+  unnest_tokens(word, content,
+                to_lower=FALSE,
+                token = "tweets") %>%
+  filter(!str_detect(word, regex("[#@+0-9]|https://", 
+                                 ignore_case = TRUE))) %>%
+  mutate(word = str_to_lower(word)) %>%
+  filter(!word %in% c("du", "bois", "one", "ive",
+                      "can", "get", "just", "also",
+                      "please", "still", "did",
+                      "didnt", "got", "going", "dont",
+                      "hes", "maybe"),
+         str_length(word) > 2) %>%
+  mutate(
+    word = case_when(
+      word == "weeks" ~ "week",
+      word == "recreated" ~ "recreate",
+      word == "visualizations" ~ "visualization",
+      word == "seeing" ~ "see",
+      word == "saw" ~ "see",
+      word == "plots" ~ "plot",
+      word == "attempted" ~ "attempt",
+      word == "attempting" ~ "attempt",
+      word == "challenges" ~ "challenge",
+      word == "challenging" ~ "challenge",
+      word == "dropped" ~ "drop",
+      word == "following" ~ "follow",
+      TRUE ~ word
+    )
+  ) %>%
+  anti_join(get_stopwords()) %>%
+  count(word, sort = TRUE)
+
+common_words <- common_words %>%
+  as.data.frame() 
+
+common_words %>% head()
+
+colnames(common_words) <- c("word", "freq")
+
+wordcloud2::letterCloud(common_words,
+                        word = "SR",
+                        size=1.5,
+                        shuffle = FALSE,    
+                        color = "skyblue")
+```
+
+
+
+## Location of active contributors to #tidytuesday <br> (for #DuBoisChallenge week)
+
+
+```{r}
+ tweet_location_count <- tweets %>% 
+    na.omit() %>% 
+    select(lat, long) %>% 
+    group_by(lat, long) %>% 
+    add_count() %>% 
+    slice(1) %>% 
+    ungroup() %>% 
+    arrange(-n)
+```
+
+
+```{r}
+world_map <- map_data("world")
+
+ggplot() +
+  geom_polygon(data = world_map, aes(long, lat, group=group),
+               color = "gray", fill = "white") +
+  geom_point(data = tweet_location_count,
+            aes(long, lat, size = n)) +
+  labs(title = "<b> Around the world with <span style= color:'blue';>#tidytuesday</span> </b>",
+       subtitle = "<i> Ignored the tweets for which location information is unavailable </i>",
+       size = "# of tweets") +
+  theme_map() +
+  theme(
+    plot.title = ggtext::element_markdown(size=12),
+    plot.subtitle = ggtext::element_markdown(size=10),
+    legend.title = element_text(size=9)
+  )
+```
+
+
+```{r include=FALSE}
+knitr::knit_exit()
+```
+
+
+## Heatmap of tweet frequency for DuBois challenge week
+
+Source: `https://www.r-bloggers.com/2020/12/a-heatmap-as-calendar/`
+Following this source to create a calendar plot to show the twitter activity over time.
+
+- Will do later as it feels a little bit complicated :( :(
+
+
+```{r}
+tweets_date_na_removed <- tweets %>% filter(!is.na(datetime))
+
+tweets_date_na_removed <- tweets_date_na_removed %>%
+  mutate(date = date(datetime)) %>%
+  complete(date = seq(ymd("2021-01-01"), ymd("2021-12-31"), "day")) %>%
+  mutate(weekday = wday(date, label = TRUE, week_start = 1),
+         month = month(date, label = TRUE, abbr = FALSE),
+         week = isoweek(date),
+         day = day(date))
+```
+
+
+
+
+
+
