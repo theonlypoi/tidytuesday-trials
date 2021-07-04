@@ -145,35 +145,3 @@ ggplot() +
     legend.title = element_text(size=9)
   )
 ```
-
-
-```{r include=FALSE}
-knitr::knit_exit()
-```
-
-
-## Heatmap of tweet frequency for DuBois challenge week
-
-Source: `https://www.r-bloggers.com/2020/12/a-heatmap-as-calendar/`
-Following this source to create a calendar plot to show the twitter activity over time.
-
-- Will do later as it feels a little bit complicated :( :(
-
-
-```{r}
-tweets_date_na_removed <- tweets %>% filter(!is.na(datetime))
-
-tweets_date_na_removed <- tweets_date_na_removed %>%
-  mutate(date = date(datetime)) %>%
-  complete(date = seq(ymd("2021-01-01"), ymd("2021-12-31"), "day")) %>%
-  mutate(weekday = wday(date, label = TRUE, week_start = 1),
-         month = month(date, label = TRUE, abbr = FALSE),
-         week = isoweek(date),
-         day = day(date))
-```
-
-
-
-
-
-
