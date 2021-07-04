@@ -1,0 +1,179 @@
+---
+title: "Animal Rescues"
+date: 2021-07-03
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=TRUE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+library(tidytuesdayR)
+library(scales)
+library(lubridate)
+library(ggthemes)
+library(patchwork)
+
+theme_set(theme_tufte())
+```
+
+
+```{r Load, message=FALSE, warning=FALSE, include=TRUE}
+tt <- tt_load("2021-06-29")
+```
+
+```{r}
+animal_rescues <- tt$animal_rescues %>%
+  select(-type_of_incident) %>%
+  filter(cal_year < 2021) %>%
+  mutate(incident_notional_cost = parse_number(incident_notional_cost, 
+                                               na = "NULL")) %>%
+  mutate(animal_group_parent = str_to_title(animal_group_parent))
+```
+
+
+
+```{r}
+years <- seq(2009, 2020, 1)
+
+summary <- animal_rescues %>%
+  group_by(cal_year) %>%
+  summarize(total = n()) %>%
+  ungroup() %>%
+  mutate(
+    color = case_when(
+      cal_year == 2019 ~ "blue",
+      cal_year == 2020 ~ "red",
+      TRUE ~ "gray"
+  )) %>%
+  mutate(color = fct_relevel(color, "gray", "blue", "red"))
+
+p1 <- 
+  summary %>%
+  ggplot() +
+  geom_col(aes(cal_year, total, fill = color)) +
+  geom_text(
+    data = summary %>% filter(cal_year %in% c(2019, 2020)),
+    aes(x = cal_year, y = total, label = total),
+    vjust = -0.9
+  ) +
+  coord_cartesian(ylim = c(500,800)) +
+  scale_x_continuous(labels = as.character(years),
+                     breaks = years) +
+  scale_fill_manual(values=c("gray", "blue", "red")) +
+  labs(x = "",
+       y = "Total # of incidents",
+       title = "Total number of incidents over time(2009-20)",
+       subtitle = "There has been a 20% increase in the number of incidents from 2019 to 2020.\n% change is calculated by comparing the current year number of incidents with \nprevious year number of incidents") +
+  ggthemes::theme_tufte() +
+  theme(legend.position = "none")
+
+
+p2 <- 
+  summary %>%
+  mutate(pct_change = ((total - lag(total))/total)) %>%
+  mutate(pct_change = ifelse(is.na(pct_change), 0, pct_change)) %>%
+  filter(cal_year != 2021) %>%
+  ggplot() +
+  geom_point(aes(cal_year, pct_change)) +
+  geom_line(aes(cal_year, pct_change)) +
+  scale_x_continuous(labels = as.character(years),
+                     breaks = years) +
+  scale_y_continuous(labels = percent) +
+  labs(x = "", y = "% change in incidents",
+       title = "") +
+  theme_tufte()
+
+p1 / p2 + plot_layout(heights = c(3, 1))
+```
+
+
+```{r}
+animal_rescues %>%
+  filter(!str_detect(animal_group_parent, "Unknown")) %>%
+  group_by(animal_group_parent) %>%
+  summarize(max_cost = max(incident_notional_cost, na.rm = TRUE),
+            .groups = "drop") %>%
+  mutate(animal_group_parent = fct_reorder(animal_group_parent,
+                                           max_cost)) %>%
+  arrange(desc(max_cost)) %>%
+  head(15) %>%
+  ggplot(aes(x = max_cost, y = animal_group_parent,
+             fill = animal_group_parent)) +
+  geom_col() +
+  scale_x_continuous(labels = comma) +
+  labs(x = "Max cost to rescue",
+       y = "",
+       title = "Maximum cost to rescue animals",
+       subtitle = "Showing top-15 most expensive rescue operations") +
+  theme(legend.position = "none")
+```
+
+
+```{r}
+most_rescued_animals <-
+  animal_rescues %>%
+  mutate(animal_group_parent = fct_lump(animal_group_parent, 5)) %>% 
+  filter(animal_group_parent != "Other") %>%
+  count(animal_group_parent, sort =  TRUE) %>%
+  pull(animal_group_parent)
+
+cost_summary <- 
+  animal_rescues %>%
+  select(animal_group_parent, incident_notional_cost) %>%
+  filter(animal_group_parent %in% most_rescued_animals) %>%
+  group_by(animal_group_parent) %>%
+  summarize(
+    mean_total_cost = mean(incident_notional_cost, na.rm = TRUE),
+    sd_total_cost = sd(incident_notional_cost, na.rm = TRUE),
+    total_cost = sum(incident_notional_cost, na.rm = TRUE)
+ )
+  
+p1 <- 
+  cost_summary %>% 
+  mutate(animal_group_parent = fct_reorder(animal_group_parent, 
+                                           mean_total_cost, 
+                                           .fun = min, 
+                                           .desc = TRUE)) %>%
+  ggplot() +
+  geom_point(aes(x = mean_total_cost, 
+                 y = animal_group_parent,
+                 color = animal_group_parent)) +
+  geom_errorbar(aes(xmin = mean_total_cost - sd_total_cost,
+                    xmax = mean_total_cost + sd_total_cost,
+                    y = animal_group_parent,
+                    color = animal_group_parent),
+                width = 0.05) +
+  scale_x_continuous(
+    breaks = c(200, 400, 600, 800, 1000, 1200, 1400, 1600),
+    labels = comma_format()
+  ) +
+  labs(
+    x = "Average Rescue Cost",
+    y = "",
+    title = "Average cost to rescue top-5 most \ncommonly rescued animals"
+  ) +
+  theme(legend.position = "none")
+
+
+p2 <- cost_summary %>%
+  mutate(animal_group_parent = fct_reorder(animal_group_parent, 
+                                           total_cost)) %>%
+  ggplot() +
+  geom_col(aes(x = animal_group_parent, y = total_cost, 
+               fill = animal_group_parent)) + 
+  scale_y_continuous(labels = comma_format()) +
+  labs(x = "", y = "Total Cost", 
+       title = "Total cost of animal rescue operations",
+       subtitle = "From 2009-20") +
+  theme(legend.position = "none")
+
+p2 + p1
+```
+
+
+
